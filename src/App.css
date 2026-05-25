@@ -128,6 +128,7 @@ body { background: var(--bg); color: var(--text); font-family: -apple-system, Bl
 .login-input::placeholder { color: var(--muted); }
 .login-error { background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.3); color: #f85149; border-radius: 8px; padding: 10px 14px; font-size: 13px; }
 .login-success { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); color: #10b981; border-radius: 8px; padding: 10px 14px; font-size: 13px; }
+.otp-input { text-align: center; font-size: 24px !important; font-weight: 700; letter-spacing: 8px; padding: 14px !important; }
 .login-submit-btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; font-family: inherit; margin-top: 4px; }
 .login-submit-btn:hover { opacity: 0.88; }
 .login-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }

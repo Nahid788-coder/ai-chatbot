@@ -1,30 +1,60 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
+
+type Screen = 'login' | 'register' | 'otp';
 
 const LoginPage = () => {
   const { login, register, loginWithGoogle } = useAuth();
-  const [isRegister, setIsRegister] = useState(false);
+  const [screen, setScreen] = useState<Screen>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setSuccess('');
     setLoading(true);
     try {
-      if (isRegister) {
-        await register(name, email, password);
-        setSuccess('Account created! Check your email to confirm, then login.');
-      } else {
-        await login(email, password);
-      }
+      await register(name, email, password);
+      setScreen('otp'); // Show OTP screen
     } catch (err: any) {
       setError(err?.message || 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await login(email, password);
+    } catch (err: any) {
+      setError(err?.message || 'Invalid email or password');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token: otp.trim(),
+        type: 'signup',
+      });
+      if (error) throw error;
+      // Auto logged in after OTP verification
+    } catch (err: any) {
+      setError(err?.message || 'Invalid OTP. Check your email.');
     } finally {
       setLoading(false);
     }
@@ -39,6 +69,51 @@ const LoginPage = () => {
     }
   };
 
+  // OTP Verification Screen
+  if (screen === 'otp') {
+    return (
+      <div className="login-page">
+        <div className="login-card">
+          <div className="login-logo">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="32" height="32">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+            <span>AI Chat</span>
+          </div>
+
+          <h2>Verify Your Email</h2>
+          <p className="login-subtitle">
+            We sent a 6-digit OTP to <strong>{email}</strong>. Check your inbox!
+          </p>
+
+          <form onSubmit={handleVerifyOtp} className="login-form">
+            <input
+              type="text"
+              placeholder="Enter 6-digit OTP"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              required
+              maxLength={6}
+              className="login-input otp-input"
+              autoFocus
+            />
+            {error && <div className="login-error">⚠ {error}</div>}
+            <button type="submit" className="login-submit-btn" disabled={loading || otp.length < 6}>
+              {loading ? 'Verifying...' : 'Verify & Login'}
+            </button>
+          </form>
+
+          <p className="login-toggle">
+            Wrong email?
+            <button onClick={() => { setScreen('register'); setOtp(''); setError(''); }}>
+              {' '}Go back
+            </button>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="login-page">
       <div className="login-card">
@@ -49,9 +124,9 @@ const LoginPage = () => {
           <span>AI Chat</span>
         </div>
 
-        <h2>{isRegister ? 'Create Account' : 'Welcome Back'}</h2>
+        <h2>{screen === 'register' ? 'Create Account' : 'Welcome Back'}</h2>
         <p className="login-subtitle">
-          {isRegister ? 'Sign up to save your chat history' : 'Login to access your conversations'}
+          {screen === 'register' ? 'Sign up to save your chat history' : 'Login to access your conversations'}
         </p>
 
         {/* Google Login */}
@@ -67,8 +142,8 @@ const LoginPage = () => {
 
         <div className="login-divider"><span>or</span></div>
 
-        <form onSubmit={handleSubmit} className="login-form">
-          {isRegister && (
+        <form onSubmit={screen === 'register' ? handleRegister : handleLogin} className="login-form">
+          {screen === 'register' && (
             <input
               type="text"
               placeholder="Your name"
@@ -96,16 +171,15 @@ const LoginPage = () => {
             className="login-input"
           />
           {error && <div className="login-error">⚠ {error}</div>}
-          {success && <div className="login-success">✅ {success}</div>}
           <button type="submit" className="login-submit-btn" disabled={loading}>
-            {loading ? 'Please wait...' : isRegister ? 'Create Account' : 'Login'}
+            {loading ? 'Please wait...' : screen === 'register' ? 'Create Account' : 'Login'}
           </button>
         </form>
 
         <p className="login-toggle">
-          {isRegister ? 'Already have an account?' : "Don't have an account?"}
-          <button onClick={() => { setIsRegister(!isRegister); setError(''); setSuccess(''); }}>
-            {isRegister ? ' Login' : ' Sign up'}
+          {screen === 'register' ? 'Already have an account?' : "Don't have an account?"}
+          <button onClick={() => { setScreen(screen === 'register' ? 'login' : 'register'); setError(''); }}>
+            {screen === 'register' ? ' Login' : ' Sign up'}
           </button>
         </p>
       </div>
