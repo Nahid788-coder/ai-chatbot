@@ -3,7 +3,7 @@ import { useAuth } from './context/AuthContext';
 import { useChat } from './hooks/useChat';
 import { useHistory } from './hooks/useHistory';
 import { AI_MODELS } from './data/models';
-import type { Conversation } from './types/chat';
+import type { Conversation, Message } from './types/chat';
 import ModelSelector from './components/ModelSelector';
 import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
@@ -15,20 +15,21 @@ import './App.css';
 function App() {
   const { user, loading: authLoading, logout } = useAuth();
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const [shareMsg, setShareMsg] = useState('');
 
   const userId = user?.id ?? null;
   const userName = user?.user_metadata?.name ?? user?.email ?? 'User';
   const userEmail = user?.email ?? '';
 
   const { conversations, fetchConversations, loadMessages, deleteConversation } = useHistory(userId);
-  const { state, sendMessage, selectModel, clearChat, startNewChat, loadConversation } =
+  const { state, streamingContent, sendMessage, selectModel, clearChat, startNewChat, loadConversation } =
     useChat(userId, fetchConversations);
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [state.messages, state.loading]);
+  }, [state.messages, state.loading, streamingContent]);
 
   const handleSelectConversation = async (conv: Conversation) => {
     const model = AI_MODELS.find((m) => m.id === conv.modelId) ?? AI_MODELS[2];
@@ -47,12 +48,31 @@ function App() {
     if (activeConvId === id) handleNewChat();
   };
 
+  const handleRename = (_id: string, _newTitle: string) => {
+    fetchConversations();
+  };
+
+  const handleShareChat = () => {
+    const text = state.messages
+      .map((m) => `${m.role === 'user' ? 'You' : 'AI'}: ${m.content}`)
+      .join('\n\n');
+    navigator.clipboard.writeText(text);
+    setShareMsg('Chat copied to clipboard!');
+    setTimeout(() => setShareMsg(''), 3000);
+  };
+
+  const isQuotaError = state.error?.startsWith('QUOTA_ERROR:');
+  const errorDisplay = isQuotaError ? state.error?.replace('QUOTA_ERROR: ', '') : state.error;
+
+  // Streaming message object for display
+  const streamingMessage: Message | null = streamingContent
+    ? { id: 'streaming', role: 'assistant', content: streamingContent, timestamp: new Date(), model: state.selectedModel.name }
+    : null;
+
   if (authLoading) {
     return (
       <div className="app-loading">
-        <div className="loading-dots">
-          <span /><span /><span />
-        </div>
+        <div className="loading-dots"><span /><span /><span /></div>
       </div>
     );
   }
@@ -69,7 +89,6 @@ function App() {
           <span>AI Chat</span>
         </div>
 
-        {/* User Info */}
         <div className="user-info">
           <div className="user-avatar">{userName.charAt(0).toUpperCase()}</div>
           <div className="user-details">
@@ -105,6 +124,7 @@ function App() {
               activeId={activeConvId}
               onSelect={handleSelectConversation}
               onDelete={handleDelete}
+              onRename={handleRename}
             />
           </div>
         </div>
@@ -123,17 +143,29 @@ function App() {
               <div className="chat-model-provider">{state.selectedModel.provider}</div>
             </div>
           </div>
-          <button className="clear-btn" onClick={() => { clearChat(); setActiveConvId(null); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-              <polyline points="3 6 5 6 21 6"/>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-            </svg>
-            Clear
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {state.messages.length > 0 && (
+              <button className="clear-btn" onClick={handleShareChat} title="Copy chat to clipboard">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                  <polyline points="16 6 12 2 8 6"/>
+                  <line x1="12" y1="2" x2="12" y2="15"/>
+                </svg>
+                {shareMsg || 'Share'}
+              </button>
+            )}
+            <button className="clear-btn" onClick={() => { clearChat(); setActiveConvId(null); }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+              </svg>
+              Clear
+            </button>
+          </div>
         </div>
 
         <div className="messages-area">
-          {state.messages.length === 0 && (
+          {state.messages.length === 0 && !streamingContent && (
             <div className="empty-chat">
               <div className="empty-icon">{state.selectedModel.emoji}</div>
               <h2>Chat with {state.selectedModel.name}</h2>
@@ -150,7 +182,13 @@ function App() {
             <ChatMessage key={msg.id} message={msg} />
           ))}
 
-          {state.loading && <TypingIndicator />}
+          {/* Streaming message */}
+          {streamingMessage && (
+            <ChatMessage message={streamingMessage} isStreaming={true} />
+          )}
+
+          {/* Typing indicator only before first chunk */}
+          {state.loading && !streamingContent && <TypingIndicator />}
 
           {state.error && (
             <div className="error-msg">
@@ -159,7 +197,12 @@ function App() {
                 <line x1="12" y1="8" x2="12" y2="12"/>
                 <line x1="12" y1="16" x2="12.01" y2="16"/>
               </svg>
-              {state.error}
+              <span>{errorDisplay}</span>
+              {isQuotaError && state.messages.length > 0 && (
+                <button className="share-quota-btn" onClick={handleShareChat}>
+                  📋 Copy chat before switching model
+                </button>
+              )}
             </div>
           )}
           <div ref={bottomRef} />

@@ -165,8 +165,36 @@ body { background: var(--bg); color: var(--text); font-family: -apple-system, Bl
 .conv-info { flex: 1; min-width: 0; }
 .conv-title { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .conv-meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
-.conv-del-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 11px; padding: 2px 5px; border-radius: 4px; opacity: 0; transition: all 0.15s; }
-.conv-item:hover .conv-del-btn { opacity: 1; }
+.conv-actions { display: flex; gap: 2px; opacity: 0; transition: opacity 0.15s; }
+.conv-item:hover .conv-actions { opacity: 1; }
+.conv-del-btn, .conv-action-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px; padding: 2px 5px; border-radius: 4px; transition: all 0.15s; }
 .conv-del-btn:hover { color: #f85149; background: rgba(248,81,73,0.1); }
+.conv-action-btn:hover { color: var(--primary); background: rgba(99,102,241,0.1); }
+.conv-rename-input { background: var(--surface); border: 1px solid var(--primary); border-radius: 4px; color: var(--text); font-size: 12px; padding: 2px 6px; width: 100%; outline: none; }
+
+/* Streaming dot */
+.msg-streaming-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); margin-left: 6px; animation: blink 0.8s ease-in-out infinite; }
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.2; } }
+
+/* Markdown styles */
+.msg-markdown { line-height: 1.6; }
+.msg-markdown p { margin-bottom: 8px; }
+.msg-markdown p:last-child { margin-bottom: 0; }
+.msg-markdown code { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-size: 13px; font-family: monospace; }
+.msg-markdown pre { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 8px 0; }
+.msg-markdown pre code { background: none; padding: 0; font-size: 13px; }
+.msg-markdown ul, .msg-markdown ol { padding-left: 20px; margin: 6px 0; }
+.msg-markdown li { margin-bottom: 4px; }
+.msg-markdown h1,.msg-markdown h2,.msg-markdown h3 { margin: 12px 0 6px; font-weight: 600; }
+.msg-markdown strong { font-weight: 600; }
+.msg-markdown blockquote { border-left: 3px solid var(--primary); padding-left: 12px; margin: 8px 0; color: var(--muted); }
+.msg-markdown table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+.msg-markdown th, .msg-markdown td { border: 1px solid rgba(255,255,255,0.1); padding: 6px 12px; text-align: left; }
+.msg-markdown th { background: rgba(255,255,255,0.05); }
+
+/* Quota share button */
+.share-quota-btn { margin-left: auto; background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.4); color: #818cf8; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+.share-quota-btn:hover { background: rgba(99,102,241,0.25); }
+.error-msg { flex-wrap: wrap; }
 
 @media (max-width: 700px) { .sidebar { display: none; } .messages-area { padding: 16px; } }

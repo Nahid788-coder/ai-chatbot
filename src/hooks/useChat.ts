@@ -14,16 +14,19 @@ export const useChat = (userId: string | null, onConversationSaved?: () => void)
     selectedModel: AI_MODELS[2],
   });
 
+  const [streamingContent, setStreamingContent] = useState<string>('');
   const conversationIdRef = useRef<string | null>(null);
 
   const startNewChat = useCallback(() => {
     conversationIdRef.current = null;
     setState((prev) => ({ ...prev, messages: [], error: null }));
+    setStreamingContent('');
   }, []);
 
   const loadConversation = useCallback((messages: Message[], convId: string, model: AIModel) => {
     conversationIdRef.current = convId;
     setState((prev) => ({ ...prev, messages, selectedModel: model, error: null }));
+    setStreamingContent('');
   }, []);
 
   const sendMessage = useCallback(async (content: string) => {
@@ -42,19 +45,24 @@ export const useChat = (userId: string | null, onConversationSaved?: () => void)
       loading: true,
       error: null,
     }));
+    setStreamingContent('');
 
     try {
       const allMessages = [...state.messages, userMessage];
       const { provider, id: modelId } = state.selectedModel;
 
+      const onChunk = (text: string) => setStreamingContent(text);
+
       let responseText = '';
       if (provider === 'gemini') {
-        responseText = await sendGeminiMessage(allMessages, modelId);
+        responseText = await sendGeminiMessage(allMessages, modelId, onChunk);
       } else if (provider === 'groq') {
-        responseText = await sendGroqMessage(allMessages, modelId);
+        responseText = await sendGroqMessage(allMessages, modelId, onChunk);
       } else {
-        responseText = await sendOpenRouterMessage(allMessages, modelId);
+        responseText = await sendOpenRouterMessage(allMessages, modelId, onChunk);
       }
+
+      setStreamingContent('');
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -70,12 +78,11 @@ export const useChat = (userId: string | null, onConversationSaved?: () => void)
         loading: false,
       }));
 
-      // Save to Supabase if logged in
+      // Save to Supabase
       if (userId) {
         let convId = conversationIdRef.current;
 
         if (!convId) {
-          // Create new conversation
           const title = content.trim().slice(0, 60) + (content.length > 60 ? '...' : '');
           const { data: conv, error } = await supabase
             .from('conversations')
@@ -93,14 +100,12 @@ export const useChat = (userId: string | null, onConversationSaved?: () => void)
           convId = conv.id;
           conversationIdRef.current = convId;
         } else {
-          // Update timestamp
           await supabase
             .from('conversations')
             .update({ updated_at: new Date().toISOString() })
             .eq('id', convId);
         }
 
-        // Save messages
         await supabase.from('messages').insert([
           { conversation_id: convId, role: 'user', content: userMessage.content },
           { conversation_id: convId, role: 'assistant', content: responseText, model: state.selectedModel.name },
@@ -109,13 +114,22 @@ export const useChat = (userId: string | null, onConversationSaved?: () => void)
         onConversationSaved?.();
       }
     } catch (err: any) {
-      console.error('Error:', err?.response?.data || err?.message || err);
+      setStreamingContent('');
       const msg =
-        err?.response?.data?.error?.message ||
-        err?.response?.data?.message ||
         err?.message ||
         'Failed to get response.';
-      setState((prev) => ({ ...prev, loading: false, error: `Error: ${msg}` }));
+
+      // Check if quota/rate limit error
+      const isQuota = msg.toLowerCase().includes('quota') ||
+                      msg.toLowerCase().includes('rate limit') ||
+                      msg.toLowerCase().includes('429') ||
+                      msg.toLowerCase().includes('limit exceeded');
+
+      setState((prev) => ({
+        ...prev,
+        loading: false,
+        error: isQuota ? `QUOTA_ERROR: ${msg}` : `Error: ${msg}`
+      }));
     }
   }, [state, userId, onConversationSaved]);
 
@@ -126,7 +140,8 @@ export const useChat = (userId: string | null, onConversationSaved?: () => void)
   const clearChat = useCallback(() => {
     conversationIdRef.current = null;
     setState((prev) => ({ ...prev, messages: [], error: null }));
+    setStreamingContent('');
   }, []);
 
-  return { state, sendMessage, selectModel, clearChat, startNewChat, loadConversation };
+  return { state, streamingContent, sendMessage, selectModel, clearChat, startNewChat, loadConversation };
 };
