@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -13,6 +13,36 @@ const LoginPage = () => {
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [countdown, setCountdown] = useState(30);
+  const [canResend, setCanResend] = useState(false);
+
+  useEffect(() => {
+    if (screen !== 'otp') return;
+    setCountdown(30);
+    setCanResend(false);
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) { clearInterval(timer); setCanResend(true); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [screen]);
+
+  const handleResend = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await register(name, email, password);
+      setCountdown(30);
+      setCanResend(false);
+      setOtp('');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to resend');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,7 +50,7 @@ const LoginPage = () => {
     setLoading(true);
     try {
       await register(name, email, password);
-      setScreen('otp'); // Show OTP screen
+      setScreen('otp');
     } catch (err: any) {
       setError(err?.message || 'Something went wrong');
     } finally {
@@ -102,6 +132,16 @@ const LoginPage = () => {
               {loading ? 'Verifying...' : 'Verify & Login'}
             </button>
           </form>
+
+          <div className="otp-resend">
+            {canResend ? (
+              <button className="resend-btn" onClick={handleResend} disabled={loading}>
+                🔄 Resend OTP
+              </button>
+            ) : (
+              <p className="resend-timer">Resend in <strong>{countdown}s</strong></p>
+            )}
+          </div>
 
           <p className="login-toggle">
             Wrong email?
