@@ -205,8 +205,8 @@ const LoginPage = () => {
             </>
           )}
           <input
-            type="email"
-            placeholder="Email address"
+            type="text"
+            placeholder={screen === 'register' ? 'Email address' : 'Email or Phone number'}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
