@@ -178,7 +178,7 @@ const LoginPage = () => {
 
         <p className="login-toggle">
           {screen === 'register' ? 'Already have an account?' : "Don't have an account?"}
-          <button onClick={() => { setScreen(screen === 'register' ? 'login' : 'register'); setError(''); }}>
+          <button onClick={() => { setScreen(screen === 'register' ? 'login' : 'register'); setError(''); setEmail(''); setPassword(''); setName(''); }}>
             {screen === 'register' ? ' Login' : ' Sign up'}
           </button>
         </p>
