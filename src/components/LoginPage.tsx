@@ -8,6 +8,7 @@ const LoginPage = () => {
   const { login, register, loginWithGoogle } = useAuth();
   const [screen, setScreen] = useState<Screen>('login');
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
@@ -33,7 +34,7 @@ const LoginPage = () => {
     setError('');
     setLoading(true);
     try {
-      await register(name, email, password);
+      await register(name, phone, email, password);
       setCountdown(30);
       setCanResend(false);
       setOtp('');
@@ -49,7 +50,7 @@ const LoginPage = () => {
     setError('');
     setLoading(true);
     try {
-      await register(name, email, password);
+      await register(name, phone, email, password);
       setScreen('otp');
     } catch (err: any) {
       setError(err?.message || 'Something went wrong');
@@ -184,14 +185,24 @@ const LoginPage = () => {
 
         <form onSubmit={screen === 'register' ? handleRegister : handleLogin} className="login-form">
           {screen === 'register' && (
-            <input
-              type="text"
-              placeholder="Your name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              className="login-input"
-            />
+            <>
+              <input
+                type="text"
+                placeholder="Full name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="login-input"
+              />
+              <input
+                type="tel"
+                placeholder="Phone number"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                required
+                className="login-input"
+              />
+            </>
           )}
           <input
             type="email"
@@ -218,7 +229,7 @@ const LoginPage = () => {
 
         <p className="login-toggle">
           {screen === 'register' ? 'Already have an account?' : "Don't have an account?"}
-          <button onClick={() => { setScreen(screen === 'register' ? 'login' : 'register'); setError(''); setEmail(''); setPassword(''); setName(''); }}>
+          <button onClick={() => { setScreen(screen === 'register' ? 'login' : 'register'); setError(''); setEmail(''); setPassword(''); setName(''); setPhone(''); }}>
             {screen === 'register' ? ' Login' : ' Sign up'}
           </button>
         </p>
