@@ -78,7 +78,7 @@ async function openrouterModels(key) {
   const { data = [] } = await r.json();
   // Only the free models, so nobody burns credits by accident.
   return data
-    .filter((m) => m.id.endsWith(':free'))
+    .filter((m) => m.id.endsWith(':free') && !/safety|guard|embed|vision-only/i.test(m.id))
     .slice(0, 12)
     .map((m) => ({
       id: m.id,
@@ -96,7 +96,13 @@ export async function listModels() {
     k.openrouter ? openrouterModels(k.openrouter) : [],
   ];
   const results = await Promise.allSettled(jobs);
-  return results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+  const all = results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+  // Newest versions first within each provider (e.g. Gemini 3.8 before 2.5).
+  const ver = (id) => parseFloat((id.match(/(\d+(?:\.\d+)?)/) || [0, 0])[1]);
+  const order = { groq: 0, gemini: 1, openrouter: 2 };
+  return all.sort(
+    (a, b) => order[a.provider] - order[b.provider] || (a.provider === 'gemini' ? ver(b.id) - ver(a.id) : 0),
+  );
 }
 
 /* ------------------------------------------------------------------ */
