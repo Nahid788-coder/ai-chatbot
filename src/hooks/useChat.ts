@@ -1,147 +1,154 @@
-import { useState, useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import type { Message, AIModel, ChatState } from '../types/chat';
-import { sendGeminiMessage } from '../api/gemini';
-import { sendGroqMessage } from '../api/groq';
-import { sendOpenRouterMessage } from '../api/openrouter';
-import { AI_MODELS } from '../data/models';
+import { streamChat } from '../api/chat';
+import type { AIModel, ChatState, Message } from '../types/chat';
 
-export const useChat = (userId: string | null, onConversationSaved?: () => void) => {
-  const [state, setState] = useState<ChatState>({
-    messages: [],
-    loading: false,
-    error: null,
-    selectedModel: AI_MODELS[2],
-  });
+const QUOTA = /quota|rate.?limit|429|limit exceeded|too many requests/i;
 
-  const [streamingContent, setStreamingContent] = useState<string>('');
+export const useChat = (userId: string | null, model: AIModel, onSaved?: () => void) => {
+  const [state, setState] = useState<ChatState>({ messages: [], loading: false, error: null });
+  const [streamingContent, setStreamingContent] = useState('');
+
+  const messagesRef = useRef<Message[]>([]);
+  const loadingRef = useRef(false);
   const conversationIdRef = useRef<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const startNewChat = useCallback(() => {
+  const setMessages = (messages: Message[]) => {
+    messagesRef.current = messages;
+    setState((prev) => ({ ...prev, messages }));
+  };
+
+  const reset = useCallback(() => {
+    abortRef.current?.abort();
     conversationIdRef.current = null;
-    setState((prev) => ({ ...prev, messages: [], error: null }));
+    messagesRef.current = [];
+    loadingRef.current = false;
+    setState({ messages: [], loading: false, error: null });
     setStreamingContent('');
   }, []);
 
-  const loadConversation = useCallback((messages: Message[], convId: string, model: AIModel) => {
+  const loadConversation = useCallback((messages: Message[], convId: string) => {
+    abortRef.current?.abort();
     conversationIdRef.current = convId;
-    setState((prev) => ({ ...prev, messages, selectedModel: model, error: null }));
+    messagesRef.current = messages;
+    loadingRef.current = false;
+    setState({ messages, loading: false, error: null });
     setStreamingContent('');
   }, []);
 
-  const sendMessage = useCallback(async (content: string) => {
-    if (!content.trim() || state.loading) return;
+  const save = useCallback(
+    async (userMessage: Message, reply: string) => {
+      if (!userId) return;
+      let convId = conversationIdRef.current;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: content.trim(),
-      timestamp: new Date(),
-    };
-
-    setState((prev) => ({
-      ...prev,
-      messages: [...prev.messages, userMessage],
-      loading: true,
-      error: null,
-    }));
-    setStreamingContent('');
-
-    try {
-      const allMessages = [...state.messages, userMessage];
-      const { provider, id: modelId } = state.selectedModel;
-
-      const onChunk = (text: string) => setStreamingContent(text);
-
-      let responseText = '';
-      if (provider === 'gemini') {
-        responseText = await sendGeminiMessage(allMessages, modelId, onChunk);
-      } else if (provider === 'groq') {
-        responseText = await sendGroqMessage(allMessages, modelId, onChunk);
+      if (!convId) {
+        const text = userMessage.content;
+        const title = text.slice(0, 60) + (text.length > 60 ? '…' : '');
+        const { data, error } = await supabase
+          .from('conversations')
+          .insert({ user_id: userId, title, model_id: model.id, model_name: model.name, model_emoji: '✦' })
+          .select()
+          .single();
+        if (error) throw error;
+        convId = data.id as string;
+        conversationIdRef.current = convId;
       } else {
-        responseText = await sendOpenRouterMessage(allMessages, modelId, onChunk);
+        await supabase
+          .from('conversations')
+          .update({ updated_at: new Date().toISOString(), model_id: model.id, model_name: model.name })
+          .eq('id', convId);
       }
 
+      await supabase.from('messages').insert([
+        { conversation_id: convId, role: 'user', content: userMessage.content },
+        { conversation_id: convId, role: 'assistant', content: reply, model: model.name },
+      ]);
+      onSaved?.();
+    },
+    [userId, model, onSaved],
+  );
+
+  const sendMessage = useCallback(
+    async (content: string) => {
+      const text = content.trim();
+      if (!text || loadingRef.current) return;
+
+      const userMessage: Message = { id: crypto.randomUUID(), role: 'user', content: text, timestamp: new Date() };
+      const history = [...messagesRef.current, userMessage];
+      loadingRef.current = true;
+      messagesRef.current = history;
+      setState({ messages: history, loading: true, error: null });
       setStreamingContent('');
 
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: responseText,
-        timestamp: new Date(),
-        model: state.selectedModel.name,
-      };
+      const controller = new AbortController();
+      abortRef.current = controller;
+      let reply = '';
 
-      setState((prev) => ({
-        ...prev,
-        messages: [...prev.messages, assistantMessage],
-        loading: false,
-      }));
-
-      // Save to Supabase
-      if (userId) {
-        let convId = conversationIdRef.current;
-
-        if (!convId) {
-          const title = content.trim().slice(0, 60) + (content.length > 60 ? '...' : '');
-          const { data: conv, error } = await supabase
-            .from('conversations')
-            .insert({
-              user_id: userId,
-              title,
-              model_id: state.selectedModel.id,
-              model_name: state.selectedModel.name,
-              model_emoji: state.selectedModel.emoji,
-            })
-            .select()
-            .single();
-
-          if (error) throw error;
-          convId = conv.id;
-          conversationIdRef.current = convId;
-        } else {
-          await supabase
-            .from('conversations')
-            .update({ updated_at: new Date().toISOString() })
-            .eq('id', convId);
+      try {
+        reply = await streamChat(
+          model,
+          history,
+          (t) => {
+            reply = t;
+            setStreamingContent(t);
+          },
+          controller.signal,
+        );
+      } catch (err) {
+        const aborted = controller.signal.aborted;
+        if (!aborted || !reply) {
+          loadingRef.current = false;
+          setStreamingContent('');
+          if (aborted) {
+            setState((prev) => ({ ...prev, loading: false }));
+            return;
+          }
+          const msg = (err as Error)?.message || 'Failed to get a response.';
+          setState((prev) => ({ ...prev, loading: false, error: QUOTA.test(msg) ? `QUOTA:${msg}` : msg }));
+          return;
         }
-
-        await supabase.from('messages').insert([
-          { conversation_id: convId, role: 'user', content: userMessage.content },
-          { conversation_id: convId, role: 'assistant', content: responseText, model: state.selectedModel.name },
-        ]);
-
-        onConversationSaved?.();
+        // Stopped by the user after some text arrived: keep what we have.
       }
-    } catch (err: any) {
+
+      loadingRef.current = false;
       setStreamingContent('');
-      const msg =
-        err?.message ||
-        'Failed to get response.';
 
-      // Check if quota/rate limit error
-      const isQuota = msg.toLowerCase().includes('quota') ||
-                      msg.toLowerCase().includes('rate limit') ||
-                      msg.toLowerCase().includes('429') ||
-                      msg.toLowerCase().includes('limit exceeded');
+      const assistant: Message = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: reply || '_(empty response)_',
+        timestamp: new Date(),
+        model: model.name,
+      };
+      // Only append if this conversation was not reset mid-stream.
+      if (messagesRef.current === history) {
+        setMessages([...history, assistant]);
+        setState((prev) => ({ ...prev, loading: false }));
+        try {
+          await save(userMessage, assistant.content);
+        } catch (e) {
+          console.error('Could not save chat', e);
+        }
+      } else {
+        setState((prev) => ({ ...prev, loading: false }));
+      }
+    },
+    [model, save],
+  );
 
-      setState((prev) => ({
-        ...prev,
-        loading: false,
-        error: isQuota ? `QUOTA_ERROR: ${msg}` : `Error: ${msg}`
-      }));
-    }
-  }, [state, userId, onConversationSaved]);
+  const stop = useCallback(() => abortRef.current?.abort(), []);
 
-  const selectModel = useCallback((model: AIModel) => {
-    setState((prev) => ({ ...prev, selectedModel: model, error: null }));
-  }, []);
+  const retry = useCallback(() => {
+    const msgs = messagesRef.current;
+    const last = msgs[msgs.length - 1];
+    if (!last || last.role !== 'user') return;
+    messagesRef.current = msgs.slice(0, -1);
+    setState((prev) => ({ ...prev, messages: messagesRef.current, error: null }));
+    sendMessage(last.content);
+  }, [sendMessage]);
 
-  const clearChat = useCallback(() => {
-    conversationIdRef.current = null;
-    setState((prev) => ({ ...prev, messages: [], error: null }));
-    setStreamingContent('');
-  }, []);
+  const dismissError = useCallback(() => setState((prev) => ({ ...prev, error: null })), []);
 
-  return { state, streamingContent, sendMessage, selectModel, clearChat, startNewChat, loadConversation };
+  return { state, streamingContent, sendMessage, stop, retry, reset, loadConversation, dismissError };
 };

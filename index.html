@@ -1,10 +1,31 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Aurora Chat · Multi-model AI chat by Nahid Husain Doi</title>
+    <meta
+      name="description"
+      content="Aurora Chat is an open-source portfolio project by Nahid Husain Doi: chat with Llama, GPT-OSS, Gemini and more, with streaming replies and saved history."
+    />
+    <meta name="author" content="Nahid Husain Doi" />
+    <meta name="theme-color" content="#0B0D17" />
+    <meta property="og:title" content="Aurora Chat" />
+    <meta property="og:description" content="Open-source multi-model AI chat, built by Nahid Husain Doi." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ai-chatbot</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      try {
+        var t = localStorage.getItem('aurora-theme');
+        if (!t) t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

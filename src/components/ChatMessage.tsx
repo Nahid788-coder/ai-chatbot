@@ -1,87 +1,114 @@
-import { useState } from 'react';
+import { memo, useState, isValidElement } from 'react';
+import type { ReactNode, ReactElement } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Message } from '../types/chat';
+import { IconCheck, IconCopy } from './Icons';
+import { LogoMark } from './Logo';
 
-interface ChatMessageProps {
+/** Some reasoning models (Qwen, DeepSeek) stream their thinking in <think> tags. Hide it. */
+const clean = (text: string) =>
+  text
+    .replace(/<think>[\s\S]*?<\/think>/g, '')
+    .replace(/<think>[\s\S]*$/, '')
+    .trimStart();
+
+const useCopy = () => {
+  const [copied, setCopied] = useState(false);
+  const copy = (text: string) => {
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    });
+  };
+  return { copied, copy };
+};
+
+const textOf = (node: ReactNode): string => {
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(textOf).join('');
+  if (isValidElement(node)) return textOf((node.props as { children?: ReactNode }).children);
+  return '';
+};
+
+const CodeBlock = ({ children }: { children?: ReactNode }) => {
+  const { copied, copy } = useCopy();
+  const code = isValidElement(children) ? (children as ReactElement<{ className?: string; children?: ReactNode }>) : null;
+  const lang = code?.props.className?.replace('language-', '') ?? '';
+  const raw = textOf(code?.props.children ?? children).replace(/\n$/, '');
+
+  return (
+    <div className="code-block">
+      <div className="code-head">
+        <span>{lang || 'code'}</span>
+        <button onClick={() => copy(raw)} className="code-copy">
+          {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <pre>
+        <code>{raw}</code>
+      </pre>
+    </div>
+  );
+};
+
+const mdComponents = {
+  pre: CodeBlock,
+  a: (props: { href?: string; children?: ReactNode }) => (
+    <a href={props.href} target="_blank" rel="noreferrer noopener">
+      {props.children}
+    </a>
+  ),
+};
+
+interface Props {
   message: Message;
   isStreaming?: boolean;
 }
 
-const ChatMessage = ({ message, isStreaming }: ChatMessageProps) => {
-  const [copied, setCopied] = useState(false);
+const ChatMessage = ({ message, isStreaming }: Props) => {
+  const { copied, copy } = useCopy();
   const isUser = message.role === 'user';
+  const content = isUser ? message.content : clean(message.content);
 
-  const copy = () => {
-    navigator.clipboard.writeText(message.content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const time = message.timestamp.toLocaleTimeString('en-US', {
-    hour: '2-digit', minute: '2-digit',
-  });
+  if (isUser) {
+    return (
+      <div className="msg msg--user">
+        <div className="bubble-user">{content}</div>
+      </div>
+    );
+  }
 
   return (
-    <div className={`msg-wrap ${isUser ? 'msg-wrap--user' : 'msg-wrap--ai'}`}>
-      {/* Avatar */}
-      <div className="msg-avatar">
-        {isUser ? (
-          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-            <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
-          </svg>
-        ) : (
-          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-          </svg>
-        )}
+    <div className="msg msg--ai">
+      <div className="ai-avatar">
+        <LogoMark size={30} />
       </div>
-
-      <div className="msg-body">
-        {/* Header */}
-        <div className="msg-header">
-          <span className="msg-sender">{isUser ? 'You' : (message.model || 'AI')}</span>
-          <span className="msg-time">{time}</span>
-          {isStreaming && <span className="msg-streaming-dot" />}
+      <div className="ai-body">
+        <div className="ai-meta">
+          <span className="ai-name">{message.model || 'Aurora'}</span>
+          {isStreaming && <span className="live-dot" aria-label="Streaming" />}
         </div>
-
-        {/* Content */}
-        <div className={`msg-bubble ${isUser ? 'msg-bubble--user' : 'msg-bubble--ai'}`}>
-          {isUser ? (
-            <p className="msg-text">{message.content}</p>
-          ) : (
-            <div className="msg-markdown">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {message.content}
-              </ReactMarkdown>
-            </div>
-          )}
+        <div className={`markdown ${isStreaming ? 'is-streaming' : ''}`}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+            {content || ' '}
+          </ReactMarkdown>
         </div>
-
-        {/* Copy button — only when not streaming */}
         {!isStreaming && (
-          <button className="msg-copy" onClick={copy}>
-            {copied ? (
-              <>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                Copied!
-              </>
-            ) : (
-              <>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-                Copy
-              </>
-            )}
-          </button>
+          <div className="msg-actions">
+            <button className="ghost-btn small" onClick={() => copy(content)} title="Copy reply">
+              {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+            <span className="msg-time">
+              {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
         )}
       </div>
     </div>
   );
 };
 
-export default ChatMessage;
+export default memo(ChatMessage);

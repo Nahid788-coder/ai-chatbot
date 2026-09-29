@@ -1,72 +1,80 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import type { Conversation, Message } from '../types/chat';
+import type { Conversation, ConversationRow, Message, MessageRow } from '../types/chat';
+
+const toConversation = (c: ConversationRow): Conversation => ({
+  id: c.id,
+  userId: c.user_id,
+  title: c.title,
+  modelId: c.model_id,
+  modelName: c.model_name,
+  createdAt: new Date(c.created_at),
+  updatedAt: new Date(c.updated_at),
+});
+
+async function loadConversations(userId: string): Promise<Conversation[]> {
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('*')
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false });
+  if (error) {
+    console.error(error);
+    return [];
+  }
+  return ((data ?? []) as ConversationRow[]).map(toConversation);
+}
 
 export const useHistory = (userId: string | null) => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
 
-  const fetchConversations = useCallback(async () => {
-    if (!userId) { setConversations([]); return; }
-
-    const { data, error } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('user_id', userId)
-      .order('updated_at', { ascending: false });
-
-    if (error) { console.error(error); return; }
-
-    setConversations(
-      (data ?? []).map((c: any) => ({
-        id: c.id,
-        userId: c.user_id,
-        title: c.title,
-        modelId: c.model_id,
-        modelName: c.model_name,
-        modelEmoji: c.model_emoji ?? '🤖',
-        createdAt: new Date(c.created_at),
-        updatedAt: new Date(c.updated_at),
-      }))
-    );
+  useEffect(() => {
+    if (!userId) return;
+    let alive = true;
+    loadConversations(userId).then((list) => {
+      if (alive) setConversations(list);
+    });
+    return () => {
+      alive = false;
+    };
   }, [userId]);
 
-  useEffect(() => {
-    fetchConversations();
-  }, [fetchConversations]);
+  const refresh = useCallback(async () => {
+    if (!userId) return;
+    setConversations(await loadConversations(userId));
+  }, [userId]);
 
-  const loadMessages = useCallback(async (conversationId: string): Promise<{ messages: Message[]; modelId: string; modelName: string; modelEmoji: string }> => {
-    const { data: conv } = await supabase
-      .from('conversations')
-      .select('model_id, model_name, model_emoji')
-      .eq('id', conversationId)
-      .single();
-
-    const { data: msgs } = await supabase
+  const loadMessages = useCallback(async (conversationId: string): Promise<Message[]> => {
+    const { data } = await supabase
       .from('messages')
       .select('*')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true });
 
-    const messages: Message[] = (msgs ?? []).map((m: any) => ({
+    return ((data ?? []) as MessageRow[]).map((m) => ({
       id: m.id,
       role: m.role,
       content: m.content,
       timestamp: new Date(m.created_at),
-      model: m.model,
+      model: m.model ?? undefined,
     }));
-
-    return {
-      messages,
-      modelId: conv?.model_id ?? '',
-      modelName: conv?.model_name ?? '',
-      modelEmoji: conv?.model_emoji ?? '🤖',
-    };
   }, []);
 
-  const deleteConversation = useCallback(async (conversationId: string) => {
-    await supabase.from('conversations').delete().eq('id', conversationId);
-    setConversations((prev) => prev.filter((c) => c.id !== conversationId));
+  const renameConversation = useCallback(async (id: string, title: string) => {
+    setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, title } : c)));
+    await supabase.from('conversations').update({ title }).eq('id', id);
   }, []);
 
-  return { conversations, fetchConversations, loadMessages, deleteConversation };
+  const deleteConversation = useCallback(async (id: string) => {
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+    await supabase.from('conversations').delete().eq('id', id);
+  }, []);
+
+  return {
+    conversations: userId ? conversations : [],
+    refresh,
+    loadMessages,
+    renameConversation,
+    deleteConversation,
+  };
 };

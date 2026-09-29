@@ -1,1 +1,115 @@
-﻿body{margin:0}
+/* ============================================================
+   Aurora theme tokens
+   Dark: deep navy with a violet → cyan aurora accent.
+   Light: soft paper white with the same accent, slightly deeper.
+   ============================================================ */
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0b0d17;
+  --bg-elev: #0f1222;
+  --surface: #151933;
+  --surface-2: #1b2040;
+  --surface-3: #232a52;
+  --border: #252b4f;
+  --border-strong: #343c6b;
+  --text: #e8eaf6;
+  --text-2: #b7bbd6;
+  --muted: #8a8fb1;
+  --accent: #8b6cff;
+  --accent-2: #22d3ee;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(139, 108, 255, 0.14);
+  --user-bubble: linear-gradient(135deg, #6d4dff 0%, #4f46e5 100%);
+  --user-ink: #ffffff;
+  --danger: #ff6b81;
+  --danger-soft: rgba(255, 107, 129, 0.12);
+  --success: #34d399;
+  --code-bg: #0a0c18;
+  --code-head: #12162c;
+  --shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.6);
+  --glow: 0 0 0 1px rgba(139, 108, 255, 0.35), 0 8px 30px -8px rgba(139, 108, 255, 0.45);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f6f7fb;
+  --bg-elev: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f0f1f8;
+  --surface-3: #e6e8f3;
+  --border: #e3e5f0;
+  --border-strong: #cfd3e6;
+  --text: #151833;
+  --text-2: #3b4064;
+  --muted: #6b7093;
+  --accent: #6d4aff;
+  --accent-2: #0891b2;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(109, 74, 255, 0.1);
+  --user-bubble: linear-gradient(135deg, #6d4aff 0%, #4f46e5 100%);
+  --user-ink: #ffffff;
+  --danger: #e11d48;
+  --danger-soft: rgba(225, 29, 72, 0.08);
+  --success: #059669;
+  --code-bg: #0f1222;
+  --code-head: #171b33;
+  --shadow: 0 20px 50px -24px rgba(30, 34, 80, 0.28);
+  --glow: 0 0 0 1px rgba(109, 74, 255, 0.35), 0 8px 24px -10px rgba(109, 74, 255, 0.4);
+}
+
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.25s ease, color 0.25s ease;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+a {
+  color: var(--accent);
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}

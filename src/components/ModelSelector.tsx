@@ -1,65 +1,94 @@
-import { useState } from 'react';
-import type { AIModel } from '../types/chat';
-import { AI_MODELS } from '../data/models';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { AIModel, Provider } from '../types/chat';
+import { PROVIDERS } from '../data/models';
+import { IconCheck, IconChevron, IconSearch } from './Icons';
 
-interface ModelSelectorProps {
+interface Props {
+  models: AIModel[];
   selected: AIModel;
   onSelect: (model: AIModel) => void;
 }
 
-const PROVIDERS = ['all', 'gemini', 'groq', 'openrouter'] as const;
+type Filter = 'all' | Provider;
 
-const ModelSelector = ({ selected, onSelect }: ModelSelectorProps) => {
+const fmtContext = (n: number) => (n >= 1_000_000 ? `${Math.round(n / 1_000_000)}M` : `${Math.round(n / 1000)}K`);
+
+const ProviderDot = ({ provider }: { provider: Provider }) => (
+  <span className="provider-dot" style={{ background: PROVIDERS[provider].color }} />
+);
+
+const ModelSelector = ({ models, selected, onSelect }: Props) => {
   const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'gemini' | 'groq' | 'openrouter'>('all');
+  const [filter, setFilter] = useState<Filter>('all');
+  const [query, setQuery] = useState('');
+  const rootRef = useRef<HTMLDivElement>(null);
 
-  const filtered = filter === 'all' ? AI_MODELS : AI_MODELS.filter((m) => m.provider === filter);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const providers = useMemo(() => [...new Set(models.map((m) => m.provider))], [models]);
+  const visible = models.filter(
+    (m) =>
+      (filter === 'all' || m.provider === filter) &&
+      (!query || `${m.name} ${m.id}`.toLowerCase().includes(query.toLowerCase())),
+  );
 
   return (
-    <div className="model-selector">
-      <button className="model-trigger" onClick={() => setOpen(!open)}>
-        <span className="model-emoji">{selected.emoji}</span>
+    <div className="model-select" ref={rootRef}>
+      <button className="model-trigger" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <ProviderDot provider={selected.provider} />
         <span className="model-trigger-name">{selected.name}</span>
-        <span className="model-provider-badge" style={{ background: selected.color + '22', color: selected.color }}>
-          {selected.provider}
-        </span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"
-          style={{ transform: open ? 'rotate(180deg)' : 'rotate(0)', transition: '0.2s' }}>
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
+        <IconChevron size={16} className={`chev ${open ? 'up' : ''}`} />
       </button>
 
       {open && (
-        <div className="model-dropdown">
-          {/* Filter tabs */}
-          <div className="model-filters">
-            {PROVIDERS.map((p) => (
-              <button
-                key={p}
-                className={`filter-tab ${filter === p ? 'active' : ''}`}
-                onClick={() => setFilter(p)}
-              >
-                {p === 'all' ? 'All' : p === 'openrouter' ? 'OpenRouter' : p.charAt(0).toUpperCase() + p.slice(1)}
-              </button>
-            ))}
+        <div className="model-menu" role="listbox">
+          <div className="model-search">
+            <IconSearch size={15} />
+            <input autoFocus placeholder="Search models" value={query} onChange={(e) => setQuery(e.target.value)} />
           </div>
-
-          {/* Model list */}
+          {providers.length > 1 && (
+            <div className="model-tabs">
+              {(['all', ...providers] as Filter[]).map((p) => (
+                <button key={p} className={`tab ${filter === p ? 'active' : ''}`} onClick={() => setFilter(p)}>
+                  {p === 'all' ? 'All' : PROVIDERS[p].label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="model-list">
-            {filtered.map((model) => (
+            {visible.length === 0 && <p className="model-empty">No models match.</p>}
+            {visible.map((m) => (
               <button
-                key={model.id}
-                className={`model-item ${selected.id === model.id ? 'active' : ''}`}
-                onClick={() => { onSelect(model); setOpen(false); }}
+                key={`${m.provider}:${m.id}`}
+                role="option"
+                aria-selected={m.id === selected.id}
+                className={`model-row ${m.id === selected.id ? 'active' : ''}`}
+                onClick={() => {
+                  onSelect(m);
+                  setOpen(false);
+                }}
               >
-                <span className="model-item-emoji">{model.emoji}</span>
-                <div className="model-item-info">
-                  <div className="model-item-name">{model.name}</div>
-                  <div className="model-item-desc">{model.description}</div>
-                </div>
-                <span className="model-item-badge" style={{ background: model.color + '22', color: model.color }}>
-                  {model.provider}
+                <ProviderDot provider={m.provider} />
+                <span className="model-row-text">
+                  <span className="model-row-name">{m.name}</span>
+                  <span className="model-row-sub">
+                    {PROVIDERS[m.provider].label}
+                    {m.context ? ` · ${fmtContext(m.context)} context` : ''}
+                  </span>
                 </span>
+                {m.id === selected.id && <IconCheck size={16} className="model-row-check" />}
               </button>
             ))}
           </div>

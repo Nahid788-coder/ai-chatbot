@@ -1,59 +1,64 @@
-import { useState, useRef, useEffect } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import { IconSend, IconStop } from './Icons';
 
-interface ChatInputProps {
+interface Props {
   onSend: (message: string) => void;
+  onStop: () => void;
   loading: boolean;
+  modelName: string;
 }
 
-const ChatInput = ({ onSend, loading }: ChatInputProps) => {
+const ChatInput = ({ onSend, onStop, loading, modelName }: Props) => {
   const [value, setValue] = useState('');
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const ref = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 160) + 'px';
-    }
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
   }, [value]);
 
-  const handleSend = () => {
+  const send = () => {
     if (!value.trim() || loading) return;
-    onSend(value.trim());
+    onSend(value);
     setValue('');
   };
 
-  const handleKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+  const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
-      handleSend();
+      send();
     }
   };
 
   return (
-    <div className="chat-input-wrap">
-      <div className="chat-input-inner">
+    <div className="composer-wrap">
+      <div className="composer">
         <textarea
-          ref={textareaRef}
-          className="chat-textarea"
-          placeholder="Type a message... (Enter to send, Shift+Enter for new line)"
+          ref={ref}
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          onKeyDown={handleKey}
-          disabled={loading}
+          onKeyDown={onKey}
+          placeholder={`Message ${modelName}…`}
           rows={1}
+          aria-label="Message"
+          autoFocus
         />
-        <button
-          className="send-btn"
-          onClick={handleSend}
-          disabled={loading || !value.trim()}
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-          </svg>
-        </button>
+        {loading ? (
+          <button className="send-btn stop" onClick={onStop} title="Stop generating" aria-label="Stop">
+            <IconStop size={18} />
+          </button>
+        ) : (
+          <button className="send-btn" onClick={send} disabled={!value.trim()} title="Send" aria-label="Send">
+            <IconSend size={18} />
+          </button>
+        )}
       </div>
-      <p className="input-hint">Enter to send · Shift+Enter for new line</p>
+      <p className="composer-hint">
+        <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line · AI can make mistakes
+      </p>
     </div>
   );
 };
