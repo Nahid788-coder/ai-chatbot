@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from './context/auth';
 import { useChat } from './hooks/useChat';
-import { useHistory } from './hooks/useHistory';
+import { useHistory, type ConversationPatch } from './hooks/useHistory';
 import { useModels } from './hooks/useModels';
 import { useTheme } from './hooks/useTheme';
 import { pickDefault } from './data/models';
@@ -42,12 +42,28 @@ function App() {
   const userName: string = user?.user_metadata?.name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'there';
   const userEmail = user?.email ?? '';
 
-  const { conversations, refresh, loadMessages, renameConversation, deleteConversation } = useHistory(userId);
+  const { conversations, upsertConversation, loadMessages, renameConversation, deleteConversation } =
+    useHistory(userId);
+
+  const onSaved = useCallback(
+    (conv: ConversationPatch, isOpen: boolean) => {
+      upsertConversation(conv);
+      if (isOpen) setActiveConvId(conv.id);
+    },
+    [upsertConversation],
+  );
   const { state, streamingContent, sendMessage, stop, retry, reset, loadConversation, dismissError } = useChat(
     userId,
     model,
-    refresh,
+    onSaved,
   );
+
+  // Messages of chats already opened in this session, so going back to one does not fetch it again.
+  // Only settled chats are kept (not mid-reply or failed), so the cache always matches the database.
+  const messageCache = useRef(new Map<string, Message[]>());
+  useEffect(() => {
+    if (activeConvId && !state.loading && !state.error) messageCache.current.set(activeConvId, state.messages);
+  }, [activeConvId, state.messages, state.loading, state.error]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -92,7 +108,12 @@ function App() {
 
   const openConversation = async (conv: Conversation) => {
     setSidebarOpen(false);
-    const messages = await loadMessages(conv.id);
+    if (conv.id === activeConvId) return; // already open
+    let messages = messageCache.current.get(conv.id);
+    if (!messages) {
+      messages = await loadMessages(conv.id);
+      messageCache.current.set(conv.id, messages);
+    }
     const m = models.find((x) => x.id === conv.modelId);
     if (m) selectModel(m);
     stickToBottom.current = true;
@@ -101,6 +122,7 @@ function App() {
   };
 
   const removeConversation = async (id: string) => {
+    messageCache.current.delete(id);
     await deleteConversation(id);
     if (activeConvId === id) newChat();
   };

@@ -1,11 +1,16 @@
 import { useCallback, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { streamChat } from '../api/chat';
-import type { AIModel, ChatState, Message } from '../types/chat';
+import type { AIModel, ChatState, Message, ConversationRow } from '../types/chat';
+import { toConversation, type ConversationPatch } from './useHistory';
 
 const QUOTA = /quota|rate.?limit|429|limit exceeded|too many requests/i;
 
-export const useChat = (userId: string | null, model: AIModel, onSaved?: () => void) => {
+export const useChat = (
+  userId: string | null,
+  model: AIModel,
+  onSaved?: (conv: ConversationPatch, isOpen: boolean) => void,
+) => {
   const [state, setState] = useState<ChatState>({ messages: [], loading: false, error: null });
   const [streamingContent, setStreamingContent] = useState('');
 
@@ -41,6 +46,7 @@ export const useChat = (userId: string | null, model: AIModel, onSaved?: () => v
     async (userMessage: Message, reply: string) => {
       if (!userId) return;
       let convId = conversationIdRef.current;
+      let saved: ConversationPatch;
 
       if (!convId) {
         const text = userMessage.content;
@@ -53,18 +59,21 @@ export const useChat = (userId: string | null, model: AIModel, onSaved?: () => v
         if (error) throw error;
         convId = data.id as string;
         conversationIdRef.current = convId;
+        saved = toConversation(data as ConversationRow);
       } else {
+        const now = new Date();
         await supabase
           .from('conversations')
-          .update({ updated_at: new Date().toISOString(), model_id: model.id, model_name: model.name })
+          .update({ updated_at: now.toISOString(), model_id: model.id, model_name: model.name })
           .eq('id', convId);
+        saved = { id: convId, updatedAt: now, modelId: model.id, modelName: model.name };
       }
 
       await supabase.from('messages').insert([
         { conversation_id: convId, role: 'user', content: userMessage.content },
         { conversation_id: convId, role: 'assistant', content: reply, model: model.name },
       ]);
-      onSaved?.();
+      onSaved?.(saved, conversationIdRef.current === convId);
     },
     [userId, model, onSaved],
   );

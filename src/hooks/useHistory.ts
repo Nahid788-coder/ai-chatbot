@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Conversation, ConversationRow, Message, MessageRow } from '../types/chat';
 
-const toConversation = (c: ConversationRow): Conversation => ({
+export const toConversation = (c: ConversationRow): Conversation => ({
   id: c.id,
   userId: c.user_id,
   title: c.title,
@@ -25,6 +25,9 @@ async function loadConversations(userId: string): Promise<Conversation[]> {
   return ((data ?? []) as ConversationRow[]).map(toConversation);
 }
 
+/** A saved conversation: a full row for a new chat, or just the changed fields for an existing one. */
+export type ConversationPatch = Pick<Conversation, 'id'> & Partial<Conversation>;
+
 export const useHistory = (userId: string | null) => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
 
@@ -39,10 +42,15 @@ export const useHistory = (userId: string | null) => {
     };
   }, [userId]);
 
-  const refresh = useCallback(async () => {
-    if (!userId) return;
-    setConversations(await loadConversations(userId));
-  }, [userId]);
+  // After a message is saved we already know what changed, so the list is updated here
+  // instead of loading every conversation from the database again.
+  const upsertConversation = useCallback((conv: ConversationPatch) => {
+    setConversations((prev) => {
+      const old = prev.find((c) => c.id === conv.id);
+      if (!old && !conv.title) return prev;
+      return [{ ...old, ...conv } as Conversation, ...prev.filter((c) => c.id !== conv.id)];
+    });
+  }, []);
 
   const loadMessages = useCallback(async (conversationId: string): Promise<Message[]> => {
     const { data } = await supabase
@@ -72,7 +80,7 @@ export const useHistory = (userId: string | null) => {
 
   return {
     conversations: userId ? conversations : [],
-    refresh,
+    upsertConversation,
     loadMessages,
     renameConversation,
     deleteConversation,
